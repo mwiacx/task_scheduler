@@ -15,6 +15,10 @@ def get_strategies(strategies):
     return set(res)
 
 
+def default_strategies():
+    return set([LimitRangeStrategy(), DependencyStrategy(), NonOverlappingStrategy()])
+
+
 class Strategy:
     ''' strategy class '''
 
@@ -51,7 +55,7 @@ class LimitRangeStrategy(Strategy):
 
     def constraints(self, solver, vars, model):
         _members = len(model.persons)
-        for task in model.tasks:
+        for _, task in model.tasks.items():
             _task_start = vars["{}_start".format(task.name)]
             solver.add(_task_start >= 0)
             if task.assigner == "":

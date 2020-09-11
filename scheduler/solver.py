@@ -3,59 +3,72 @@
 import time
 import z3
 import typing
+import re
+
 from scheduler import strategies
 
 
 class Slover:
     """ slover class """
 
-    def __init__(self, model):
+    def __init__(self):
         self._solver = z3.Optimize()
-        self._model = model
-        self._vars = self.__build_var()
+        self._strategies = strategies.default_strategies()
+        # z3 vars
+        self._obj = z3.Int('min')
+        self._vars = {}
 
-    def __build_var(self):
+    def __build_vars(self, model):
         '''build solver vars'''
-        _vars = {}
-        # obj var
-        _vars['min'] = z3.Int('min')
         # task start time and assinger vars
-        for task in self._model.tasks:
+        for _, task in model.tasks.items():
             _var_name = "{}_start".format(task.name)
-            _vars[_var_name] = z3.Int(_var_name)
-            if task.assigner == "":
-                _var_name = "{}_assigner".format(task.name)
-                _vars[_var_name] = z3.Int(_var_name)
+            self._vars[_var_name] = z3.Int(_var_name)
+            _var_name = "{}_assigner".format(task.name)
+            self._vars[_var_name] = z3.Int(_var_name)
 
-        return _vars
-
-    def __build_constraints(self):
+    def __build_constraints(self, model):
         '''build constraints'''
-
+        # setup strategy constraints
         for strategy in self._strategies:
-            strategy.constraints(self._solver, self._vars, self._model)
-
+            strategy.constraints(self._solver, self._vars, model)
         # set objctive
-        _min = self._vars["min"]
-        for task in self._model.tasks:
+        for _, task in model.tasks.items():
             _task_start = self._vars["{}_start".format(task.name)]
             _task_length = task.length
-            self._solver.add(_min >= _task_start + _task_length)
-        h = self._solver.minimize(_min)
-        return h
+            self._solver.add(self._obj >= _task_start + _task_length)
+        self._solver.minimize(self._obj)
 
     def set_strategies(self, strategy_strings):
         self._strategies = strategies.get_strategies(strategy_strings)
 
-    def slove(self):
-        self.__build_constraints()
+    def solve(self, model):
+        self.__build_vars(model)
+        self.__build_constraints(model)
 
         res = self._solver.check()
 
         if res != z3.sat:
-            print(res)
-            return None
+            return False
 
-        model = self._solver.model()
+        return True
 
-        return model
+    def parse_result(self, model):
+        # get z3 model
+        z3_model = self._solver.model()
+        #
+        for _var_name, _var in self._vars.items():
+            _res = re.search(r'_start$', _var_name)
+            if _res != None:
+                _index, _ = _res.span()
+                _task_name = _var_name[:_index]
+                model.tasks[_task_name].start_time = z3_model.get_interp(_var)
+                continue
+            _res = re.search(r'_assigner$', _var_name)
+            if _res != None:
+                _index, _ = _res.span()
+                _task_name = _var[:_index]
+                _person_index = z3_model.get_interp(_var)
+                model.tasks[_task_name].assigner = model.persons[_person_index].name
+                continue
+            print('Warnning(solver.parse_result): unknown z3 var: {}'.format(_var_name))

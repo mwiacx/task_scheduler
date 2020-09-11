@@ -1,11 +1,16 @@
 """scheduler models"""
 
+from enum import Enum
+
 
 class Model:
     """schedule model"""
 
-    def __init__(self):
-        pass
+    def __init__(self, solver):
+        self._solver = solver
+        self._persons = {}
+        self._tasks = {}
+        self._assigner_map = {}
 
     @property
     def persons(self):
@@ -13,7 +18,11 @@ class Model:
 
     @persons.setter
     def persons(self, persons):
-        self._persons = persons
+        count = 0
+        for _p in persons:
+            self._persons[_p.name] = _p
+            self._assigner_map[count] = _p.name
+            count += 1
 
     @property
     def tasks(self):
@@ -21,7 +30,8 @@ class Model:
 
     @tasks.setter
     def tasks(self, tasks):
-        self._tasks = tasks
+        for _t in tasks:
+            self._tasks[_t.name] = _t
 
     def first_reviewers(self):
         res = []
@@ -37,6 +47,18 @@ class Model:
                 res.append(person)
         return res
 
+    def get_assigner(self, id):
+        _name = self._assigner_map[id]
+        return self._persons[_name]
+
+    def get_assigner_id(self, name):
+        _map = self._assigner_map
+        return list(_map.keys())[list(_map.values()).index(name)]
+
+    def solve(self):
+        self._solver.solve(self)
+        self._solver.parse_result(self)
+
     def draw(self):
         pass
 
@@ -44,9 +66,28 @@ class Model:
 class Person:
     """staff members"""
 
-    def __init__(self, is_first_reviewer, is_final_reviewer):
+    def __init__(self, name, energy, is_first_reviewer=False, is_final_reviewer=False):
+        assert(energy >= 0 and energy <= 1)
+        self._name = name
+        self._energy = energy
         self._is_first_reviewer = is_first_reviewer
         self._is_final_reviewer = is_final_reviewer
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, name):
+        self._name = name
+
+    @property
+    def energy(self):
+        return self._energy
+
+    @energy.setter
+    def energy(self, energy):
+        self._energy = energy
 
     @property
     def is_first_reviewer(self):
@@ -66,13 +107,17 @@ class Person:
 
 
 class Task:
-    """tasks"""
+    """task class"""
 
     def __init__(self, name, length, assigner=""):
         self._name = name
         self._length = length
         self._assigner = assigner
         self._dependencies = []
+
+    def __str__(self):
+        return "Task<name: {}, start: {}, length: {}, assigner: {}>".format(
+            self.name, self.start_time, self.length, self.assigner)
 
     @property
     def name(self):
@@ -81,6 +126,14 @@ class Task:
     @name.setter
     def name(self, name):
         self._name = name
+
+    @property
+    def task_type(self):
+        return self._task_type
+
+    @task_type.setter
+    def task_type(self, task_type):
+        self._task_type = task_type
 
     @property
     def length(self):

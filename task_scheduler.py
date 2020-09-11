@@ -2,8 +2,8 @@ from scheduler import solver
 from scheduler import models
 
 
-def test_model():
-    m = models.Model()
+def test_model(solver):
+    m = models.Model(solver)
 
     zhangsan = models.Person(False, False)
     lisi = models.Person(True, False)
@@ -32,8 +32,9 @@ def test_model():
 
 
 if __name__ == '__main__':
-    model = test_model()
-    s = solver.Slover(model)
+    s = solver.Slover()
     s.set_strategies(["LimitRange", "Dependency", "NonOverlapping"])
-    res = s.slove()
-    print(res)
+    model = test_model(s)
+    model.solve()
+    for task in model.tasks:
+        print(task)
