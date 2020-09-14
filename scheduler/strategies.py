@@ -8,6 +8,7 @@ def get_strategies(strategies):
         "LimitRange": LimitRangeStrategy(),
         "Dependency": DependencyStrategy(),
         "NonOverlapping": NonOverlappingStrategy(),
+        "EnergyLimit": EnergyLimitStrategy(),
     }
     res = []
     for s in strategies:
@@ -16,7 +17,7 @@ def get_strategies(strategies):
 
 
 def default_strategies():
-    return set([LimitRangeStrategy(), DependencyStrategy(), NonOverlappingStrategy()])
+    return set([LimitRangeStrategy(), DependencyStrategy(), NonOverlappingStrategy(), EnergyLimitStrategy()])
 
 
 class Strategy:
@@ -37,7 +38,7 @@ class DependencyStrategy(Strategy):
         super().__init__("dependency strategy")
 
     def constraints(self, solver, vars, model):
-        for task in model.tasks:
+        for _, task in model.tasks.items():
             if len(task.dependencies) == 0:
                 continue
             for dtask in task.dependencies:
@@ -57,11 +58,33 @@ class LimitRangeStrategy(Strategy):
         _members = len(model.persons)
         for _, task in model.tasks.items():
             _task_start = vars["{}_start".format(task.name)]
-            solver.add(_task_start >= 0)
-            if task.assigner == "":
-                _task_assigner = vars["{}_assigner".format(task.name)]
+            _task_assigner = vars["{}_assigner".format(task.name)]
+            if task.start_time != None:
+                solver.add(_task_start == task.start_time)
+            else:
+                solver.add(_task_start >= 0)
+            if task.assigner != None:
+                solver.add(_task_assigner ==
+                           model.get_assigner_id(task.assigner))
+            else:
                 solver.add(_task_assigner >= 0)
                 solver.add(_task_assigner < _members)
+                if task.task_type == "review1":
+                    _ids = [x for x in range(_members)]
+                    for _review1 in model.first_reviewers():
+                        _ids.remove(model.get_assigner_id(_review1.name))
+                    for _id in _ids:
+                        solver.add(_task_assigner != _id)
+                elif task.task_type == "review2":
+                    _ids = [x for x in range(_members)]
+                    for _review2 in model.final_reviewers():
+                        _ids.remove(model.get_assigner_id(_review2.name))
+                    for _id in _ids:
+                        solver.add(_task_assigner != _id)
+                elif task.task_type == "normal":
+                    pass
+                else:
+                    assert(False)
 
 
 class NonOverlappingStrategy(Strategy):
@@ -71,13 +94,12 @@ class NonOverlappingStrategy(Strategy):
         super().__init__("non-overlapping strategy")
 
     def constraints(self, solver, vars, model):
-        for i in range(len(model.tasks)):
-            _task1 = model.tasks[i]
-            if _task1.assigner != "":
+        visited = {}
+        for _, _task1 in model.tasks.items():
+            if _task1.assigner != None:
                 continue
-            for j in range(i+1, len(model.tasks)):
-                _task2 = model.tasks[j]
-                if _task2.assigner != "":
+            for _, _task2 in model.tasks.items():
+                if _task2.assigner != None or _task2.name == _task1.name or "{}_{}".format(_task1.name, _task2.name) in visited.keys():
                     continue
                 #
                 _task1_start = vars["{}_start".format(_task1.name)]
@@ -91,3 +113,23 @@ class NonOverlappingStrategy(Strategy):
                     z3.Or((_task1_start >= _task2_start + _task2_length),
                           (_task2_start >= _task1_start + _task1_length)),
                     True))
+                visited["{}_{}".format(_task1.name, _task2.name)] = True
+                visited["{}_{}".format(_task2.name, _task1.name)] = True
+        visited = {}
+
+
+class EnergyLimitStrategy(Strategy):
+    ''' energy limit strategy '''
+
+    def __init__(self):
+        super().__init__("energy limit strategy")
+
+    def constraints(self, solver, vars, model):
+        for _person_name, _person in model.persons.items():
+            _cost_time = 0
+            for _, _task in model.tasks.items():
+                _cost_time += z3.If(
+                    vars["{}_assigner".format(_task.name)] == model.get_assigner_id(
+                        _person_name), _task.length, 0)
+            #solver.add(vars["min"] >= _cost_time * (1 / _person.energy))
+            solver.add(vars["min"] / (1 / _person.energy) >= _cost_time)

@@ -11,6 +11,7 @@ class Model:
         self._persons = {}
         self._tasks = {}
         self._assigner_map = {}
+        self._min = 0
 
     @property
     def persons(self):
@@ -35,29 +36,43 @@ class Model:
 
     def first_reviewers(self):
         res = []
-        for person in self._persons:
+        for _, person in self._persons.items():
             if person.is_first_reviewer:
                 res.append(person)
         return res
 
     def final_reviewers(self):
         res = []
-        for person in self._persons:
+        for _, person in self._persons.items():
             if person.is_final_reviewer:
                 res.append(person)
         return res
 
-    def get_assigner(self, id):
-        _name = self._assigner_map[id]
+    def get_assigner(self, aid):
+        _name = self._assigner_map[aid]
         return self._persons[_name]
 
     def get_assigner_id(self, name):
         _map = self._assigner_map
         return list(_map.keys())[list(_map.values()).index(name)]
 
+    def person_tasks(self, person_name):
+        res = []
+        for _, task in self._tasks.items():
+            if task.assigner == person_name:
+                res.append(task)
+        return res
+
     def solve(self):
-        self._solver.solve(self)
+        success = self._solver.solve(self)
+        if not success:
+            return False
         self._solver.parse_result(self)
+        # update finish time
+        for _, task in self._tasks.items():
+            task.finish_time = task.start_time + task.length - 1
+
+        return True
 
     def draw(self):
         pass
@@ -72,6 +87,9 @@ class Person:
         self._energy = energy
         self._is_first_reviewer = is_first_reviewer
         self._is_final_reviewer = is_final_reviewer
+
+    def __str__(self):
+        return "Person<name: {}>".format(self.name)
 
     @property
     def name(self):
@@ -109,15 +127,19 @@ class Person:
 class Task:
     """task class"""
 
-    def __init__(self, name, length, assigner=""):
+    def __init__(self, name, length, task_type="normal", assigner=None):
+        assert(task_type == "normal" or task_type ==
+               "review1" or task_type == "review2")
         self._name = name
+        self._start_time = None
         self._length = length
         self._assigner = assigner
         self._dependencies = []
+        self._task_type = task_type
 
     def __str__(self):
-        return "Task<name: {}, start: {}, length: {}, assigner: {}>".format(
-            self.name, self.start_time, self.length, self.assigner)
+        return "Task<name: {}, start: {}, deadline: {}, length: {}, assigner: {}>".format(
+            self.name, self.start_time+1, self.finish_time+1, self.length, self.assigner)
 
     @property
     def name(self):
@@ -133,6 +155,8 @@ class Task:
 
     @task_type.setter
     def task_type(self, task_type):
+        assert(task_type == "normal" or task_type ==
+               "review1" or task_type == "review2")
         self._task_type = task_type
 
     @property
