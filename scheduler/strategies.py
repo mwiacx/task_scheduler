@@ -9,6 +9,7 @@ def get_strategies(strategies):
         "Dependency": DependencyStrategy(),
         "NonOverlapping": NonOverlappingStrategy(),
         "EnergyLimit": EnergyLimitStrategy(),
+        "Review": ReviewStrategy(),
     }
     res = []
     for s in strategies:
@@ -17,7 +18,9 @@ def get_strategies(strategies):
 
 
 def default_strategies():
-    return set([LimitRangeStrategy(), DependencyStrategy(), NonOverlappingStrategy(), EnergyLimitStrategy()])
+    return set([LimitRangeStrategy(), DependencyStrategy(),
+                NonOverlappingStrategy(), EnergyLimitStrategy(),
+                ReviewStrategy()])
 
 
 class Strategy:
@@ -96,10 +99,8 @@ class NonOverlappingStrategy(Strategy):
     def constraints(self, solver, vars, model):
         visited = {}
         for _, _task1 in model.tasks.items():
-            if _task1.assigner != None:
-                continue
             for _, _task2 in model.tasks.items():
-                if _task2.assigner != None or _task2.name == _task1.name or "{}_{}".format(_task1.name, _task2.name) in visited.keys():
+                if _task2.name == _task1.name or "{}_{}".format(_task1.name, _task2.name) in visited.keys():
                     continue
                 #
                 _task1_start = vars["{}_start".format(_task1.name)]
@@ -133,3 +134,22 @@ class EnergyLimitStrategy(Strategy):
                         _person_name), _task.length, 0)
             #solver.add(vars["min"] >= _cost_time * (1 / _person.energy))
             solver.add(vars["min"] / (1 / _person.energy) >= _cost_time)
+
+
+class ReviewStrategy(Strategy):
+    ''' review task strategy '''
+
+    def __init__(self):
+        super().__init__("review task strategy")
+
+    def constraints(self, solver, vars, model):
+        for _, _task in model.tasks.items():
+            if _task.task_type != "review1" and _task.task_type != "review2":
+                continue
+            assert(_task._parent in model.tasks.keys())
+            _parent = model.tasks[_task._parent]
+            assert(_parent.assigner != None)
+            # constraints
+            _task_assinger = vars["{}_assigner".format(_task.name)]
+            solver.add(_task_assinger !=
+                       model.get_assigner_id(_parent.assigner))

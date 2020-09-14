@@ -127,7 +127,7 @@ class Person:
 class Task:
     """task class"""
 
-    def __init__(self, name, length, task_type="normal", assigner=None):
+    def __init__(self, name, length, task_type="normal", assigner=None, parent=None):
         assert(task_type == "normal" or task_type ==
                "review1" or task_type == "review2")
         self._name = name
@@ -136,6 +136,13 @@ class Task:
         self._assigner = assigner
         self._dependencies = []
         self._task_type = task_type
+        if self._task_type == "review1" or self._task_type == "review2":
+            assert(parent != None)
+            self._parent = parent
+        elif self._task_type == "normal":
+            assert(assigner != None)
+        else:
+            assert(0)
 
     def __str__(self):
         return "Task<name: {}, start: {}, deadline: {}, length: {}, assigner: {}>".format(
